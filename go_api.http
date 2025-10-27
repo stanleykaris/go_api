@@ -1,13 +1,13 @@
 ### GET request to example server
-GET http://localhost:8080/todo
+GET http://localhost:8090/todo
 
 ### POST request to example server
-POST http://localhost:8080/todo
+POST http://localhost:8090/todo
 
 {
 "item": "go shopping"
 }
 
 ### DELETE request to example server
-DELETE http://localhost:8080/todo
+DELETE http://localhost:8090/todo
 Content-Type: application.json

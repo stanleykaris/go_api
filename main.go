@@ -1,10 +1,16 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
+	"syscall"
+	"time"
 )
 
 // TodoItem Todo T TIP <p>To run your code, right-click the code and select <b>Run</b>.</p> <p>Alternatively, click
@@ -16,6 +22,10 @@ type TodoItem struct {
 }
 
 func main() {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8089"
+	}
 	var todos = make([]string, 0)
 	var todoItem = make(map[string]TodoItem)
 	mux := http.NewServeMux()
@@ -89,7 +99,41 @@ func main() {
 
 	})
 
-	if err := http.ListenAndServe(":8080", mux); err != nil {
-		log.Fatal(err)
+	server := &http.Server{
+		Addr:    ":" + port,
+		Handler: mux,
 	}
+
+	serverErrors := make(chan error, 1)
+
+	// start the server in goroutine
+	go func() {
+		log.Printf("Listening on port %s", port)
+		serverErrors <- server.ListenAndServe()
+	}()
+
+	// channel to listen for interrupt signals
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+
+	// Block until we receive a signal or an error
+	select {
+	case err := <-serverErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("Error starting server: %v\nTry using a different port", err)
+		}
+	case sig := <-shutdown:
+		log.Printf("Received signal %s, shutting down gracefully...\n", sig)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		// attempt graceful shutdown
+		if err := server.Shutdown(ctx); err != nil {
+			log.Printf("Graceful shutdown failed: %v", err)
+			log.Fatalf("Error shutting down server: %v", err)
+		}
+		log.Println("Server shut down gracefully")
+		return
+	}
+
 }
